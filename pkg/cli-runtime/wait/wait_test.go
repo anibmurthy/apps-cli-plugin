@@ -218,7 +218,10 @@ func TestUntilDelete(t *testing.T) {
 			ctx := context.Background()
 			ctx, cancelFunc := context.WithTimeout(ctx, test.timeout)
 			defer cancelFunc()
-			client := clitesting.NewFakeClient(scheme, workload.DeepCopy())
+			builder := fake.NewClientBuilder()
+			builder = builder.WithScheme(scheme)
+			builder = builder.WithObjects(workload.DeepCopy())
+			client := clitesting.NewFakeClient(builder.Build())
 
 			// reactor fails with retryable error for 1st call and then fails with ResourseNotFoundError
 			client.AddReactor("get", "*", test.reactorFunc)

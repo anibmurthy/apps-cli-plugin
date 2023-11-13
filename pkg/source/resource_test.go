@@ -40,6 +40,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	cartov1alpha1 "github.com/vmware-tanzu/apps-cli-plugin/pkg/apis/cartographer/v1alpha1"
+	"github.com/vmware-tanzu/apps-cli-plugin/pkg/cli-runtime"
 	clitesting "github.com/vmware-tanzu/apps-cli-plugin/pkg/cli-runtime/testing"
 	"github.com/vmware-tanzu/apps-cli-plugin/pkg/source"
 )
@@ -55,7 +56,7 @@ func TestWorkloadOptionsFetchResourceObjects(t *testing.T) {
 		}).Kind("pod")
 
 	scheme := runtime.NewScheme()
-	fakeClient := clitesting.NewFakeCliClient(clitesting.NewFakeClient(scheme))
+	fakeClient := clitesting.NewFakeCliClient(clitesting.NewFakeClient(cli.NewClient("", "", scheme)))
 	table := &metav1.Table{}
 	tests := []struct {
 		name        string

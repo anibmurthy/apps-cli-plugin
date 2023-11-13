@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/vmware-tanzu/apps-cli-plugin/pkg/apis"
 	"github.com/vmware-tanzu/apps-cli-plugin/pkg/cli-runtime"
@@ -140,7 +141,10 @@ func TestSuggestComponentNames(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
 			c := cli.NewDefaultConfig("test", scheme)
-			client := clitesting.NewFakeClient(scheme, test.given...)
+			builder := fake.NewClientBuilder()
+			builder = builder.WithScheme(scheme)
+			builder = builder.WithObjects(test.given...)
+			client := clitesting.NewFakeClient(builder.Build())
 			if test.reactor != nil {
 				client.AddReactor("*", "*", test.reactor)
 			}

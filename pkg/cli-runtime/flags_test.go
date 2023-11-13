@@ -77,7 +77,8 @@ func TestAllNamespacesFlag(t *testing.T) {
 			ctx := context.TODO()
 			scheme := runtime.NewScheme()
 			c := cli.NewDefaultConfig("test", scheme)
-			c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(scheme))
+			client := cli.NewClient("", "", scheme)
+			c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(client))
 			cmd := &cobra.Command{
 				PreRunE: test.prior,
 				RunE: func(cmd *cobra.Command, args []string) error {
@@ -150,7 +151,8 @@ func TestNamespaceFlag(t *testing.T) {
 			ctx := context.TODO()
 			scheme := runtime.NewScheme()
 			c := cli.NewDefaultConfig("test", scheme)
-			c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(scheme))
+			client := cli.NewClient("", "", scheme)
+			c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(client))
 			cmd := &cobra.Command{
 				PreRunE: test.prior,
 				RunE: func(cmd *cobra.Command, args []string) error {

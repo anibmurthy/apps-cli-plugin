@@ -43,7 +43,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/vmware-tanzu/apps-cli-plugin/pkg/apis"
 	cartov1alpha1 "github.com/vmware-tanzu/apps-cli-plugin/pkg/apis/cartographer/v1alpha1"
@@ -914,7 +916,8 @@ func TestWorkloadOptionsApplyOptionsToWorkload(t *testing.T) {
 
 	scheme := k8sruntime.NewScheme()
 	c := cli.NewDefaultConfig("test", scheme)
-	c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(scheme))
+	client := cli.NewClient("", "", scheme)
+	c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(client))
 
 	tests := []struct {
 		name     string
@@ -2715,7 +2718,8 @@ Publishing source in ` + fmt.Sprintf("%q", localSource) + ` to "` + registryHost
 			output := &bytes.Buffer{}
 			c.Stdout = output
 			c.Stderr = output
-			c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(scheme))
+			client := cli.NewClient("", "", scheme)
+			c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(client))
 
 			cmd := &cobra.Command{}
 			ctx := cli.WithCommand(context.Background(), cmd)
@@ -2959,7 +2963,8 @@ Publishing source in ` + fmt.Sprintf("%q", helloJarFilePath) + ` to "` + registr
 			output := &bytes.Buffer{}
 			c.Stdout = output
 			c.Stderr = output
-			c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(scheme))
+			client := cli.NewClient("", "", scheme)
+			c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(client))
 
 			cmd := &cobra.Command{}
 			ctx := cli.WithCommand(context.Background(), cmd)
@@ -3149,7 +3154,8 @@ Publishing source in ` + fmt.Sprintf("%q", helloJarFilePath) + ` to "` + source.
 			output := &bytes.Buffer{}
 			c.Stdout = output
 			c.Stderr = output
-			c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(scheme))
+			client := cli.NewClient("", "", scheme)
+			c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(client))
 
 			cmd := &cobra.Command{}
 			ctx := cli.WithCommand(context.Background(), cmd)
@@ -3353,8 +3359,10 @@ Created workload "my-workload"`,
 			c.Stdout = output
 			c.Stderr = output
 			c.NoColor = test.noColor
-			client := clitesting.NewFakeClient(scheme)
-			c.Client = clitesting.NewFakeCliClient(client)
+			
+			builder := fakeclient.NewClientBuilder()
+	builder = builder.WithScheme(scheme)
+			c.Client = clitesting.NewFakeCliClient(builder.Build())
 
 			cmd := &cobra.Command{}
 			ctx := cli.WithCommand(context.Background(), cmd)
@@ -3394,7 +3402,7 @@ func TestWorkloadOptionsUpdate(t *testing.T) {
 
 	scheme := k8sruntime.NewScheme()
 	c := cli.NewDefaultConfig("test", scheme)
-	c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(scheme))
+	c.Client = clitesting.NewFakeCliClient(clitesting.NewFakeClient(cli.NewClient("", "", scheme)))
 
 	tests := []struct {
 		name           string
@@ -3602,7 +3610,11 @@ Updated workload "my-workload"
 			c.Stdout = output
 			c.Stderr = output
 			c.NoColor = test.noColor
-			fakeClient := clitesting.NewFakeClient(scheme, test.givenWorkload)
+
+			builder := fakeclient.NewClientBuilder()
+			builder = builder.WithScheme(scheme)
+			builder = builder.WithObjects(test.givenWorkload)
+			fakeClient := clitesting.NewFakeClient(builder.Build())
 
 			for i := range test.withReactors {
 				// in reverse order since we prepend

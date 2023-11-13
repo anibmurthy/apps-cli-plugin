@@ -27,7 +27,7 @@ type ReactionFunc = rtesting.ReactionFunc
 type Action = rtesting.Action
 type GetAction = rtesting.GetAction
 
-var NewFakeClient = rtesting.NewFakeClient
+var NewFakeClient = rtesting.NewFakeClientWrapper
 
 var InduceFailure = rtesting.InduceFailure
 

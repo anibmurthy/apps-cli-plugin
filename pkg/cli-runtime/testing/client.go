@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta/testrestmapper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/disk"
@@ -92,6 +93,14 @@ func NewFakeCliClientWithTransport(c crclient.Client, transport http.RoundTrippe
 
 // RESTClient returns a REST client from TestFactory
 func (c *fakeclient) RESTClient() (*rest.RESTClient, error) {
+	panic(fmt.Errorf("not implemented"))
+}
+
+func (c *fakeclient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	panic(fmt.Errorf("not implemented"))
+}
+
+func (c *fakeclient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
 	panic(fmt.Errorf("not implemented"))
 }
 

@@ -17,7 +17,6 @@ import (
 	clientgotesting "k8s.io/client-go/testing"
 	ref "k8s.io/client-go/tools/reference"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type clientWrapper struct {
@@ -34,15 +33,6 @@ type clientWrapper struct {
 }
 
 var _ client.Client = &clientWrapper{}
-
-// Deprecated NewFakeClient use NewFakeClientWrapper
-func NewFakeClient(scheme *runtime.Scheme, objs ...client.Object) *clientWrapper {
-	builder := fakeclient.NewClientBuilder()
-	builder = builder.WithScheme(scheme)
-	builder = builder.WithObjects(prepareObjects(objs)...)
-
-	return NewFakeClientWrapper(builder.Build())
-}
 
 func NewFakeClientWrapper(client client.Client) *clientWrapper {
 	c := &clientWrapper{
@@ -61,8 +51,7 @@ func NewFakeClientWrapper(client client.Client) *clientWrapper {
 	c.AddReactor("create", "*", func(action Action) (bool, runtime.Object, error) {
 		if createAction, ok := action.(CreateAction); ok && action.GetSubresource() == "" {
 			obj := createAction.GetObject()
-			if accessor, ok := obj.(metav1.ObjectMetaAccessor); ok {
-				objmeta := accessor.GetObjectMeta()
+			if objmeta, ok := obj.(metav1.Object); ok {
 				if objmeta.GetName() == "" && objmeta.GetGenerateName() != "" {
 					c.genCount++
 					// mutate the existing obj
@@ -128,6 +117,14 @@ func (w *clientWrapper) Scheme() *runtime.Scheme {
 
 func (w *clientWrapper) RESTMapper() meta.RESTMapper {
 	return w.client.RESTMapper()
+}
+
+func (w *clientWrapper) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	return w.client.GroupVersionKindFor(obj)
+}
+
+func (w *clientWrapper) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	return w.client.IsObjectNamespaced(obj)
 }
 
 func (w *clientWrapper) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {

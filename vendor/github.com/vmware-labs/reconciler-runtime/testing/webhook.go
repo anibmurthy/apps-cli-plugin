@@ -10,11 +10,13 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
-	logrtesting "github.com/go-logr/logr/testing"
+	"github.com/go-logr/logr/testr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
+	rtime "github.com/vmware-labs/reconciler-runtime/time"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -44,6 +46,15 @@ type AdmissionWebhookTestCase struct {
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
+	// StatusSubResourceTypes is a set of object types that support the status sub-resource. For
+	// these types, the only way to modify the resource's status is update or patch the status
+	// sub-resource. Patching or updating the main resource will not mutated the status field.
+	// Built-in Kubernetes types (e.g. Pod, Deployment, etc) are already accounted for and do not
+	// need to be listed.
+	//
+	// Interacting with a status sub-resource for a type not enumerated as having a status
+	// sub-resource will return a not found error.
+	StatusSubResourceTypes []client.Object
 	// GivenObjects build the kubernetes objects which are present at the onset of reconciliation
 	GivenObjects []client.Object
 	// APIGivenObjects contains objects that are only available via an API reader instead of the normal cache
@@ -90,6 +101,9 @@ type AdmissionWebhookTestCase struct {
 	// It is intended to clean up any state created in the Prepare step or during the test
 	// execution, or to make assertions for mocks.
 	CleanUp func(t *testing.T, ctx context.Context, tc *AdmissionWebhookTestCase) error
+	// Now is the time the test should run as, defaults to the current time. This value can be used
+	// by reconcilers via the reconcilers.RetireveNow(ctx) method.
+	Now time.Time
 }
 
 // AdmissionWebhookTests represents a map of reconciler test cases. The map key is the name of each
@@ -119,7 +133,11 @@ func (tc *AdmissionWebhookTestCase) Run(t *testing.T, scheme *runtime.Scheme, fa
 	}
 
 	ctx := reconcilers.WithStash(context.Background())
-	ctx = logr.NewContext(ctx, logrtesting.NewTestLogger(t))
+	if tc.Now == (time.Time{}) {
+		tc.Now = time.Now()
+	}
+	ctx = rtime.StashNow(ctx, tc.Now)
+	ctx = logr.NewContext(ctx, testr.New(t))
 	if deadline, ok := t.Deadline(); ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithDeadline(ctx, deadline)
@@ -147,6 +165,7 @@ func (tc *AdmissionWebhookTestCase) Run(t *testing.T, scheme *runtime.Scheme, fa
 	expectConfig := &ExpectConfig{
 		Name:                    "default",
 		Scheme:                  scheme,
+		StatusSubResourceTypes:  tc.StatusSubResourceTypes,
 		GivenObjects:            tc.GivenObjects,
 		APIGivenObjects:         tc.APIGivenObjects,
 		WithClientBuilder:       tc.WithClientBuilder,
@@ -198,7 +217,7 @@ func (tc *AdmissionWebhookTestCase) Run(t *testing.T, scheme *runtime.Scheme, fa
 
 	tc.ExpectedResponse.Complete(*tc.Request)
 	if diff := cmp.Diff(tc.ExpectedResponse, response); diff != "" {
-		t.Errorf("Unexpected response (-expected, +actual): %s", diff)
+		t.Errorf("ExpectedResponse differs (%s, %s): %s", DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 	}
 
 	expectConfig.AssertExpectations(t)

@@ -595,6 +595,6 @@ func getResponse(status int, body string) *http.Response {
 func getConfig(resp *http.Response) *cli.Config {
 	scheme := k8sruntime.NewScheme()
 	c := cli.NewDefaultConfig("test", scheme)
-	c.Client = clitesting.NewFakeCliClientWithTransport(clitesting.NewFakeClient(scheme), clitesting.NewFakeTransportFromResponse(resp))
+	c.Client = clitesting.NewFakeCliClientWithTransport(clitesting.NewFakeClient(cli.NewClient("", "", scheme)), clitesting.NewFakeTransportFromResponse(resp))
 	return c
 }

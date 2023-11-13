@@ -8,9 +8,10 @@ package reconcilers
 import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/source"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type Builder = builder.Builder
 type Manager = manager.Manager
-type Kind = source.Kind
+type Request = reconcile.Request
+type Result = reconcile.Result

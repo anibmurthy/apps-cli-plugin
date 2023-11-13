@@ -8,14 +8,14 @@ package testing
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
-	logrtesting "github.com/go-logr/logr/testing"
+	"github.com/go-logr/logr/testr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
+	rtime "github.com/vmware-labs/reconciler-runtime/time"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -35,15 +35,22 @@ type ReconcilerTestCase struct {
 
 	// inputs
 
-	// Deprecated use Request
-	Key types.NamespacedName
 	// Request identifies the object to be reconciled
-	Request controllerruntime.Request
+	Request reconcilers.Request
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
 	// WithClientBuilder allows a test to modify the fake client initialization.
 	WithClientBuilder func(*fake.ClientBuilder) *fake.ClientBuilder
+	// StatusSubResourceTypes is a set of object types that support the status sub-resource. For
+	// these types, the only way to modify the resource's status is update or patch the status
+	// sub-resource. Patching or updating the main resource will not mutated the status field.
+	// Built-in Kubernetes types (e.g. Pod, Deployment, etc) are already accounted for and do not
+	// need to be listed.
+	//
+	// Interacting with a status sub-resource for a type not enumerated as having a status
+	// sub-resource will return a not found error.
+	StatusSubResourceTypes []client.Object
 	// GivenObjects build the kubernetes objects which are present at the onset of reconciliation
 	GivenObjects []client.Object
 	// APIGivenObjects contains objects that are only available via an API reader instead of the normal cache
@@ -82,7 +89,7 @@ type ReconcilerTestCase struct {
 	// ShouldErr is true if and only if reconciliation is expected to return an error
 	ShouldErr bool
 	// ExpectedResult is compared to the result returned from the reconciler if there was no error
-	ExpectedResult controllerruntime.Result
+	ExpectedResult reconcilers.Result
 	// Verify provides the reconciliation Result and error for custom assertions
 	Verify VerifyFunc
 
@@ -96,10 +103,13 @@ type ReconcilerTestCase struct {
 	// It is intended to clean up any state created in the Prepare step or during the test
 	// execution, or to make assertions for mocks.
 	CleanUp func(t *testing.T, ctx context.Context, tc *ReconcilerTestCase) error
+	// Now is the time the test should run as, defaults to the current time. This value can be used
+	// by reconcilers via the reconcilers.RetireveNow(ctx) method.
+	Now time.Time
 }
 
 // VerifyFunc is a verification function for a reconciler's result
-type VerifyFunc func(t *testing.T, result controllerruntime.Result, err error)
+type VerifyFunc func(t *testing.T, result reconcilers.Result, err error)
 
 // VerifyStashedValueFunc is a verification function for the entries in the stash
 type VerifyStashedValueFunc func(t *testing.T, key reconcilers.StashKey, expected, actual interface{})
@@ -130,7 +140,11 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	}
 
 	ctx := context.Background()
-	ctx = logr.NewContext(ctx, logrtesting.NewTestLogger(t))
+	if tc.Now == (time.Time{}) {
+		tc.Now = time.Now()
+	}
+	ctx = rtime.StashNow(ctx, tc.Now)
+	ctx = logr.NewContext(ctx, testr.New(t))
 	if deadline, ok := t.Deadline(); ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithDeadline(ctx, deadline)
@@ -158,6 +172,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	expectConfig := &ExpectConfig{
 		Name:                    "default",
 		Scheme:                  scheme,
+		StatusSubResourceTypes:  tc.StatusSubResourceTypes,
 		GivenObjects:            tc.GivenObjects,
 		APIGivenObjects:         tc.APIGivenObjects,
 		WithClientBuilder:       tc.WithClientBuilder,
@@ -184,11 +199,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	r := factory(t, tc, expectConfig.Config())
 
 	// Run the Reconcile we're testing.
-	request := tc.Request
-	if request == (controllerruntime.Request{}) {
-		request.NamespacedName = tc.Key
-	}
-	result, err := r.Reconcile(ctx, request)
+	result, err := r.Reconcile(ctx, tc.Request)
 
 	if (err != nil) != tc.ShouldErr {
 		t.Errorf("Reconcile() error = %v, ShouldErr %v", err, tc.ShouldErr)
@@ -196,7 +207,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	if err == nil {
 		// result is only significant if there wasn't an error
 		if diff := cmp.Diff(normalizeResult(tc.ExpectedResult), normalizeResult(result)); diff != "" {
-			t.Errorf("Unexpected result (-expected, +actual): %s", diff)
+			t.Errorf("ExpectedResult differs (%s, %s): %s", DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
 
@@ -210,7 +221,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	}
 }
 
-func normalizeResult(result controllerruntime.Result) controllerruntime.Result {
+func normalizeResult(result reconcilers.Result) reconcilers.Result {
 	// RequeueAfter implies Requeue, no need to set both
 	if result.RequeueAfter != 0 {
 		result.Requeue = false

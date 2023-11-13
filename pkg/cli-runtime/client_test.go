@@ -23,11 +23,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 
 	clitestingresource "github.com/vmware-tanzu/apps-cli-plugin/pkg/cli-runtime/testing/resource"
 )
@@ -45,7 +47,10 @@ func TestNewClient(t *testing.T) {
 			Name:      "my-resource",
 		},
 	}
-	c.(*client).client = rtesting.NewFakeClient(scheme, r.DeepCopy())
+	builder := fake.NewClientBuilder()
+	builder = builder.WithScheme(scheme)
+	builder = builder.WithObjects(r.DeepCopy())
+	c.(*client).client = rtesting.NewFakeClientWrapper(builder.Build())
 	ctx := context.TODO()
 
 	if c.KubeRestConfig() == nil {
@@ -112,7 +117,10 @@ func TestNewClientWithEnvVarKubeconfig(t *testing.T) {
 
 	c := NewClient("", "", scheme)
 
-	c.(*client).client = rtesting.NewFakeClient(scheme)
+	builder := fake.NewClientBuilder()
+	builder = builder.WithScheme(scheme)
+
+	c.(*client).client = rtesting.NewFakeClientWrapper(builder.Build())
 
 	if c.KubeRestConfig() == nil {
 		t.Errorf("unexpected restconfig")
@@ -146,8 +154,10 @@ func TestNewClientWithEnvVarKubeconfigPathWithColon(t *testing.T) {
 	os.Setenv("KUBECONFIG", fmt.Sprintf("%s%s", kubeConfigPath, string(filepath.ListSeparator)))
 
 	c := NewClient("", "", scheme)
+	builder := fake.NewClientBuilder()
+	builder = builder.WithScheme(scheme)
 
-	c.(*client).client = rtesting.NewFakeClient(scheme)
+	c.(*client).client = rtesting.NewFakeClientWrapper(builder.Build())
 
 	if c.KubeRestConfig() == nil {
 		t.Errorf("unexpected restconfig")

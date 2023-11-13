@@ -24,6 +24,7 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -60,6 +61,14 @@ func (c *client) Discovery() discovery.DiscoveryInterface {
 
 func (c *client) Client() crclient.Client {
 	return c.lazyLoadClientOrDie()
+}
+
+func (c *client) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	return apiutil.GVKForObject(obj, c.scheme)
+}
+
+func (c *client) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	return apiutil.IsObjectNamespaced(obj, c.scheme, c.RESTMapper())
 }
 
 func (c *client) ToRESTConfig() (*rest.Config, error) {
@@ -218,7 +227,11 @@ func (c *client) lazyLoadKubernetesClientsetOrDie() *kubernetes.Clientset {
 func (c *client) lazyLoadClientOrDie() crclient.Client {
 	if c.client == nil {
 		restConfig := c.lazyLoadRestConfigOrDie()
-		lazyLoadMapper, err := apiutil.NewDynamicRESTMapper(c.KubeRestConfig(), apiutil.WithExperimentalLazyMapper)
+		httpClient, err := rest.HTTPClientFor(restConfig)
+		if err != nil {
+			fmt.Printf("Error: Unable to create http client %s \n", err)
+		}
+		lazyLoadMapper, err := apiutil.NewDynamicRESTMapper(c.KubeRestConfig(), httpClient)
 		if err != nil {
 			fmt.Printf("%s Unable to create rest mapper. signk8s.io/dynamicrestmapper states %s \n", printer.Serrorf("Error:"), err)
 			c.logError(err)

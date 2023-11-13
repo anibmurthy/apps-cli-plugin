@@ -17,19 +17,148 @@ limitations under the License.
 package validation
 
 import (
-	"github.com/vmware-labs/reconciler-runtime/validation"
+	"context"
+	"fmt"
+	"strings"
+
+	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-const CurrentField = validation.CurrentField
+// Deprecated CurrentField is an empty string representing an empty path to the current field.
+const CurrentField = ""
 
-type FieldValidator = validation.FieldValidator
-type FieldErrors = validation.FieldErrors
-type Validatable = validation.Validatable
+type FieldValidator interface {
+	Validate() FieldErrors
+}
 
-var ErrDisallowedFields = validation.ErrDisallowedFields
-var ErrInvalidArrayValue = validation.ErrInvalidArrayValue
-var ErrInvalidValue = validation.ErrInvalidValue
-var ErrDuplicateValue = validation.ErrDuplicateValue
-var ErrMissingField = validation.ErrMissingField
-var ErrMissingOneOf = validation.ErrMissingOneOf
-var ErrMultipleOneOf = validation.ErrMultipleOneOf
+// Deprecated FieldErrors extends an ErrorList to compose helper methods to compose field paths.
+type FieldErrors field.ErrorList
+
+type Validatable = interface {
+	Validate(context.Context) FieldErrors
+}
+
+func ErrDisallowedFields(name string, detail string) FieldErrors {
+	return FieldErrors{
+		field.Forbidden(field.NewPath(name), detail),
+	}
+}
+
+// Deprecated ErrInvalidArrayValue wraps an invalid error for an array item as field errors
+func ErrInvalidArrayValue(value interface{}, name string, index int) FieldErrors {
+	return FieldErrors{
+		field.Invalid(field.NewPath(name).Index(index), value, ""),
+	}
+}
+
+// Deprecated ErrInvalidValue wraps an invalid error as field errors
+func ErrInvalidValue(value interface{}, name string) FieldErrors {
+	return FieldErrors{
+		field.Invalid(field.NewPath(name), value, ""),
+	}
+}
+
+// Deprecated ErrDuplicateValue wraps an duplicate error as field errors
+func ErrDuplicateValue(value interface{}, names ...string) FieldErrors {
+	errs := FieldErrors{}
+
+	for _, name := range names {
+		errs = append(errs, field.Duplicate(field.NewPath(name), value))
+	}
+
+	return errs
+}
+
+// Deprecated ErrMissingField wraps an required error as field errors
+func ErrMissingField(name string) FieldErrors {
+	return FieldErrors{
+		field.Required(field.NewPath(name), ""),
+	}
+}
+
+// Deprecated ErrMissingOneOf wraps an required error for the specified fields as field errors
+func ErrMissingOneOf(names ...string) FieldErrors {
+	return FieldErrors{
+		field.Required(field.NewPath(fmt.Sprintf("[%s]", strings.Join(names, ", "))), "expected exactly one, got neither"),
+	}
+}
+
+// Deprecated ErrMultipleOneOf wraps an required error for the specified fields as field errors
+func ErrMultipleOneOf(names ...string) FieldErrors {
+	return FieldErrors{
+		field.Required(field.NewPath(fmt.Sprintf("[%s]", strings.Join(names, ", "))), "expected exactly one, got both"),
+	}
+}
+
+func (e FieldErrors) Also(errs ...FieldErrors) FieldErrors {
+	aggregate := e
+	for _, err := range errs {
+		aggregate = append(aggregate, err...)
+	}
+	return aggregate
+}
+
+// Deprecated ViaFieldIndex prepends the path of each error with the fields key and index (e.g. '.foo[0]').
+func (e FieldErrors) ViaFieldIndex(key string, index int) FieldErrors {
+	return e.ViaIndex(index).ViaField(key)
+}
+
+// Deprecated ViaIndex prepends the path of each error with the field's index using square bracket separators (e.g. '[0]').
+func (e FieldErrors) ViaIndex(index int) FieldErrors {
+	errs := make(FieldErrors, len(e))
+	for i, err := range e {
+		newField := fmt.Sprintf("[%d]", index)
+		if !strings.HasPrefix(err.Field, "[") {
+			newField = newField + "."
+		}
+		if err.Field != "[]" {
+			newField = newField + err.Field
+		}
+		errs[i] = &field.Error{
+			Type:     err.Type,
+			Field:    newField,
+			BadValue: err.BadValue,
+			Detail:   err.Detail,
+		}
+	}
+	return errs
+}
+
+// Deprecated ViaField prepends the path of each error with the field's key using a dot notation separator (e.g. '.foo')
+func (e FieldErrors) ViaField(key string) FieldErrors {
+	errs := make(FieldErrors, len(e))
+	for i, err := range e {
+		newField := key
+		if !strings.HasPrefix(err.Field, "[") {
+			newField = newField + "."
+		}
+		if err.Field != "[]" {
+			newField = newField + err.Field
+		}
+		errs[i] = &field.Error{
+			Type:     err.Type,
+			Field:    newField,
+			BadValue: err.BadValue,
+			Detail:   err.Detail,
+		}
+	}
+	return errs
+}
+
+// Deprecated ErrorList converts a FieldErrors to an api machinery field ErrorList
+func (e FieldErrors) ErrorList() field.ErrorList {
+	list := make(field.ErrorList, len(e))
+	for i := range e {
+		list[i] = e[i]
+	}
+	return list
+}
+
+// Deprecated ToAggregate combines the field errors into a single go error, or nil if there are no errors.
+func (e FieldErrors) ToAggregate() error {
+	l := e.ErrorList()
+	if len(l) == 0 {
+		return nil
+	}
+	return l.ToAggregate()
+}
